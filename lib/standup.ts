@@ -149,7 +149,7 @@ export async function fetchStandupData(): Promise<StandupData> {
 
   const { data, error } = await supabase
     .from('tasks')
-    .select('id, task_number, title, status, priority, due_date, assigned_to, updated_at')
+    .select('id, task_number, title, status, priority, due_date, assigned_to, updated_at, completed_at')
     .order('priority', { ascending: false })
 
   if (error) console.error('[standup] tasks query error:', error.message)
@@ -175,13 +175,13 @@ export async function fetchStandupData(): Promise<StandupData> {
   const done       = tasks.filter(t => t.status === 'done')
 
   const doneThisWeek = done.filter(t => {
-    if (!t.updated_at) return false
-    const d = manilaDayOf(t.updated_at)
+    if (!t.completed_at) return false
+    const d = manilaDayOf(t.completed_at)
     return d >= weekStart && d <= weekEnd
   })
   const doneLastWeek = done.filter(t => {
-    if (!t.updated_at) return false
-    const d = manilaDayOf(t.updated_at)
+    if (!t.completed_at) return false
+    const d = manilaDayOf(t.completed_at)
     return d >= lastWeekStart && d <= lastWeekEnd
   })
 
