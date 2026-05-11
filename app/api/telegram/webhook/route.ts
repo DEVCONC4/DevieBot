@@ -673,10 +673,21 @@ export async function POST(request: Request) {
 
     // Strip bot username suffix only when directly attached to a command (e.g. /help@MyBot → /help)
     const normalized = text.replace(/^(\/\w+)@\w+/, '$1').trim()
-    const [cmd, ...args] = normalized.split(/\s+/)
-    const rest = args.join(' ').trim()
+    let [cmd, ...args] = normalized.split(/\s+/)
+    let rest = args.join(' ').trim()
     // Preserve original newlines for multiline body (e.g. bulk task text)
-    const rawRest = normalized.replace(/^\/\w+\s*/, '')
+    let rawRest = normalized.replace(/^\/\w+\s*/, '')
+
+    // Allow trailing /addtask (e.g. "some text...\n/addtask") by treating
+    // everything before it as the task title.
+    if (!['/addtask', '/done', '/update', '/help', '/start', '/deadlines', '/tasks', '/standup'].includes(cmd)) {
+      const trailingAddTask = normalized.match(/^([\s\S]*?)\r?\n\s*\/addtask(?:@\w+)?\s*$/i)
+      if (trailingAddTask) {
+        cmd = '/addtask'
+        rest = trailingAddTask[1].trim()
+        rawRest = rest
+      }
+    }
 
     // ── /help or /start ───────────────────────────────────────────────
     if (cmd === '/help' || cmd === '/start') {
