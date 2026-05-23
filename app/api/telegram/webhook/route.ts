@@ -185,6 +185,16 @@ async function fetchTaskPages(
     if (m.telegram_username) memberMap.set(assigneeKey(m.telegram_username), { display, role })
   }
 
+  for (const m of (memberRows ?? [])) {
+    if (!m.name || !m.name.includes(' ')) continue
+    const firstName = assigneeKey(m.name.split(' ')[0])
+    if (!memberMap.has(firstName)) {
+      const display = m.name
+      const role    = m.role ?? ''
+      memberMap.set(firstName, { display, role })
+    }
+  }
+
   // Group tasks by member → status
   const memberBuckets = new Map<string, TaskPage>()
 
