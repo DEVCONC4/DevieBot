@@ -15,10 +15,6 @@ const ACTIVE_STATUSES = new Set(['in_progress', 'in_review', 'blocked', 'todo'])
 const STATUS_EMOJI: Record<string, string> = {
   blocked: '🚧', in_progress: '🔄', in_review: '👀', todo: '📝', backlog: '📦', done: '✅',
 }
-const STATUS_LABEL: Record<string, string> = {
-  blocked: 'Blocked', in_progress: 'In Progress', in_review: 'In Review',
-  todo: 'To Do', backlog: 'Backlog', done: 'Done',
-}
 const STATUS_ORDER = ['blocked', 'in_progress', 'in_review', 'todo', 'backlog', 'done']
 
 const PRIORITY_BADGE: Record<string, string> = {
@@ -96,22 +92,43 @@ function formatWeekLabel(startISO: string, endISO: string): string {
   return `${fmt(startISO)} – ${fmt(endISO)}`
 }
 
-function taskLine(t: any): string {
-  const code     = t.task_number ? `<code>T-${String(t.task_number).padStart(3, '0')}</code> ` : ''
-  const title    = esc(t.title)
-  const badge    = PRIORITY_BADGE[t.priority] ?? ''
-  const assignee = t.assigned_to ? ` — ${esc(t.assigned_to)}` : ''
-  const due      = t.due_date
+function taskLine(t: any, opts: { showStatus?: boolean } = {}): string {
+  const code   = t.task_number ? `<code>T-${String(t.task_number).padStart(3, '0')}</code> ` : ''
+  const title  = esc(t.title)
+  const badge  = PRIORITY_BADGE[t.priority] ?? ''
+  const status = opts.showStatus ? ` ${STATUS_EMOJI[t.status] ?? ''}` : ''
+  const due    = t.due_date
     ? ` · ${new Date(t.due_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
     : ''
-  return `▸ ${code}${title}${badge}${assignee}${due}`
+  return `▸ ${code}${title}${badge}${status}${due}`
 }
 
-function doneTaskLine(t: any): string {
-  const code     = t.task_number ? `<code>T-${String(t.task_number).padStart(3, '0')}</code> ` : ''
-  const title    = esc(t.title)
-  const assignee = t.assigned_to ? ` — ${esc(t.assigned_to)}` : ''
-  return `▸ ${code}${title}${assignee}`
+
+type Task = Record<string, unknown>
+
+/** Groups tasks by assigned_to, returning ordered [member, tasks[]] pairs. Unassigned last. */
+function groupByMember(tasks: Task[]): [string, Task[]][] {
+  const map = new Map<string, Task[]>()
+  for (const t of tasks) {
+    const key = (t.assigned_to as string | null)?.trim() || '(Unassigned)'
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(t)
+  }
+  const entries = [...map.entries()]
+  const assigned   = entries.filter(([k]) => k !== '(Unassigned)').sort(([a], [b]) => a.localeCompare(b))
+  const unassigned = entries.filter(([k]) => k === '(Unassigned)')
+  return [...assigned, ...unassigned]
+}
+
+/** Renders a member-grouped block; each task line may show a status emoji. */
+function renderByMember(tasks: Task[], opts: { showStatus?: boolean } = {}): string {
+  const groups = groupByMember(tasks)
+  let out = ''
+  for (const [member, memberTasks] of groups) {
+    out += `\n👤 <b>${esc(member)}</b>\n`
+    memberTasks.forEach(t => { out += taskLine(t, { showStatus: opts.showStatus }) + '\n' })
+  }
+  return out
 }
 
 function greeting(): string {
@@ -224,8 +241,7 @@ export async function buildStandupPage(
     if (data.doneThisWeek.length === 0) {
       text += `\n<i>No tasks completed this week yet.</i>`
     } else {
-      text += '\n'
-      data.doneThisWeek.forEach(t => { text += doneTaskLine(t) + '\n' })
+      text += renderByMember(data.doneThisWeek)
     }
 
     text += `\n📚 <b>Reminder:</b> <i>Read and finish your assigned books, cohorts! Consistency compounds.</i>`
@@ -234,22 +250,12 @@ export async function buildStandupPage(
     if (quote) text += `\n\n${quote}`
 
   } else if (filter === 'active') {
-    const sections: [string, any[]][] = [
-      ['🔄', data.inProgress],
-      ['👀', data.inReview],
-      ['📝', data.todo],
-    ]
+    const activeTasks = [...data.inProgress, ...data.inReview, ...data.todo]
     text = `${header}\n\n🔄 <b>Active</b> <i>(${data.activeCount})</i>`
     if (data.activeCount === 0) {
       text += `\n\n<i>No active tasks right now.</i>`
     } else {
-      for (const [emoji, tasks] of sections) {
-        if (!tasks.length) continue
-        const status = emoji === '🔄' ? 'in_progress' : emoji === '👀' ? 'in_review' : 'todo'
-        text += `\n\n${emoji} <i>${STATUS_LABEL[status]}</i>\n`
-        tasks.slice(0, 10).forEach(t => { text += taskLine(t) + '\n' })
-        if (tasks.length > 10) text += `<i>...and ${tasks.length - 10} more</i>`
-      }
+      text += renderByMember(activeTasks, { showStatus: true })
     }
 
   } else if (filter === 'backlog') {
@@ -257,9 +263,7 @@ export async function buildStandupPage(
     if (data.backlog.length === 0) {
       text += `\n\n<i>Backlog is clear!</i>`
     } else {
-      text += '\n'
-      data.backlog.slice(0, 15).forEach(t => { text += taskLine(t) + '\n' })
-      if (data.backlog.length > 15) text += `<i>...and ${data.backlog.length - 15} more</i>`
+      text += renderByMember(data.backlog)
     }
 
   } else {
@@ -268,9 +272,7 @@ export async function buildStandupPage(
     if (data.doneCount === 0) {
       text += `\n\n<i>Nothing marked done yet.</i>`
     } else {
-      text += '\n'
-      data.done.slice(0, 15).forEach(t => { text += taskLine(t) + '\n' })
-      if (data.done.length > 15) text += `<i>...and ${data.done.length - 15} more</i>`
+      text += renderByMember(data.done)
     }
   }
 
