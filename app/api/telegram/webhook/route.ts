@@ -871,15 +871,45 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true })
       }
 
-      // ── /done fast path ──────────────────────────────────────────────
+      // ── /done fast path — moves to in_review, supports bulk ─────────
       if (cmd === '/done') {
-        // Allow multi-word: "/done fix login bug" — join all args as one ref
+        const isBulk = rawRest.includes(',') || rawRest.includes('\n')
+        if (isBulk) {
+          const refs = rawRest.split(/[\n,]+/).map((r: string) => r.trim()).filter(Boolean)
+          const updatedLines: string[] = []
+          const failedLines: string[] = []
+          for (const ref of refs) {
+            const { tasks, ambiguous } = await findTaskByRef(ref, supabase)
+            if (tasks.length === 0) { failedLines.push(`• <b>${esc(ref)}</b> → no active task found`); continue }
+            if (ambiguous) { failedLines.push(`• <b>${esc(ref)}</b> → multiple tasks matched; use task number`); continue }
+            const t = tasks[0]
+            await supabase.from('tasks').update({ status: 'in_review' }).eq('id', t.id)
+            const code = t.task_number ? `T-${String(t.task_number).padStart(3, '0')}` : t.id.slice(0, 6)
+            updatedLines.push(`• 👀 <code>${code}</code> ${esc(t.title)} → <b>in review</b>`)
+          }
+          if (updatedLines.length === 0) {
+            let msg = `❌ No tasks were updated.\n\n`
+            if (failedLines.length > 0) msg += failedLines.join('\n') + '\n\n'
+            msg += `<i>Use /tasks to see valid task numbers.</i>`
+            await reply(msg)
+            return NextResponse.json({ ok: true })
+          }
+          let msg = `👀 <b>Moved ${updatedLines.length} task${updatedLines.length !== 1 ? 's' : ''} to In Review.</b>\n`
+          msg += updatedLines.join('\n')
+          if (failedLines.length > 0) {
+            msg += `\n\n⚠️ <b>Skipped ${failedLines.length} item${failedLines.length !== 1 ? 's' : ''}:</b>\n`
+            msg += failedLines.join('\n')
+          }
+          await reply(msg)
+          return NextResponse.json({ ok: true })
+        }
+        // Single ref — allow multi-word keyword search
         const ref = args.join(' ').trim()
         if (!ref) {
           await reply(
             `Usage: <code>/done &lt;number or keyword&gt;</code>\n\n` +
-            `<b>Examples:</b>\n/done 23\n/done login bug\n\n` +
-            `<i>Use the task number or any words from the title.</i>`
+            `<b>Examples:</b>\n/done 23\n/done login bug\n/done t21,t22,t23\n\n` +
+            `<i>Moves tasks to In Review. To mark as fully done, use /complete.</i>`
           )
           return NextResponse.json({ ok: true })
         }
@@ -897,8 +927,69 @@ export async function POST(request: Request) {
           return NextResponse.json({ ok: true })
         }
         const doneTask = doneTasks[0]
-        await supabase.from('tasks').update({ status: 'done' }).eq('id', doneTask.id)
-        await reply(`✅ <b>${esc(doneTask.title)}</b>\nMarked as done. Nice work! 🎉`)
+        await supabase.from('tasks').update({ status: 'in_review' }).eq('id', doneTask.id)
+        await reply(`👀 <b>${esc(doneTask.title)}</b>\nMoved to In Review.`)
+        return NextResponse.json({ ok: true })
+      }
+
+      // ── /complete / /completed fast path — marks done, supports bulk ─
+      if (cmd === '/complete' || cmd === '/completed') {
+        const isBulk = rawRest.includes(',') || rawRest.includes('\n')
+        if (isBulk) {
+          const refs = rawRest.split(/[\n,]+/).map((r: string) => r.trim()).filter(Boolean)
+          const updatedLines: string[] = []
+          const failedLines: string[] = []
+          for (const ref of refs) {
+            const { tasks, ambiguous } = await findTaskByRef(ref, supabase)
+            if (tasks.length === 0) { failedLines.push(`• <b>${esc(ref)}</b> → no active task found`); continue }
+            if (ambiguous) { failedLines.push(`• <b>${esc(ref)}</b> → multiple tasks matched; use task number`); continue }
+            const t = tasks[0]
+            await supabase.from('tasks').update({ status: 'done' }).eq('id', t.id)
+            const code = t.task_number ? `T-${String(t.task_number).padStart(3, '0')}` : t.id.slice(0, 6)
+            updatedLines.push(`• ✅ <code>${code}</code> ${esc(t.title)} → <b>done</b>`)
+          }
+          if (updatedLines.length === 0) {
+            let msg = `❌ No tasks were updated.\n\n`
+            if (failedLines.length > 0) msg += failedLines.join('\n') + '\n\n'
+            msg += `<i>Use /tasks to see valid task numbers.</i>`
+            await reply(msg)
+            return NextResponse.json({ ok: true })
+          }
+          let msg = `✅ <b>Marked ${updatedLines.length} task${updatedLines.length !== 1 ? 's' : ''} as done.</b>\n`
+          msg += updatedLines.join('\n')
+          if (failedLines.length > 0) {
+            msg += `\n\n⚠️ <b>Skipped ${failedLines.length} item${failedLines.length !== 1 ? 's' : ''}:</b>\n`
+            msg += failedLines.join('\n')
+          }
+          await reply(msg)
+          return NextResponse.json({ ok: true })
+        }
+        // Single ref — allow multi-word keyword search
+        const ref = args.join(' ').trim()
+        if (!ref) {
+          await reply(
+            `Usage: <code>/complete &lt;number or keyword&gt;</code>\n\n` +
+            `<b>Examples:</b>\n/complete 23\n/complete login bug\n/complete t21,t22,t23\n\n` +
+            `<i>Marks tasks as done. Use the task number or any words from the title.</i>`
+          )
+          return NextResponse.json({ ok: true })
+        }
+        const { tasks: cmpTasks, ambiguous: cmpAmbiguous } = await findTaskByRef(ref, supabase)
+        if (cmpTasks.length === 0) {
+          await reply(`❌ No active task found matching <b>"${esc(ref)}"</b>.\n\n<i>Use /tasks to see all active tasks.</i>`)
+          return NextResponse.json({ ok: true })
+        }
+        if (cmpAmbiguous) {
+          const list = cmpTasks.map(taskRefLine).join('\n')
+          await reply(
+            `🔍 Multiple tasks matched <b>"${esc(ref)}"</b>:\n${list}\n\n` +
+            `Please be more specific, or use the task number:\n<code>/complete &lt;number&gt;</code>`
+          )
+          return NextResponse.json({ ok: true })
+        }
+        const cmpTask = cmpTasks[0]
+        await supabase.from('tasks').update({ status: 'done' }).eq('id', cmpTask.id)
+        await reply(`✅ <b>${esc(cmpTask.title)}</b>\nMarked as done. Nice work! 🎉`)
         return NextResponse.json({ ok: true })
       }
 
@@ -1188,7 +1279,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true })
       }
 
-      // ── done ──
+      // ── done (NLP intent → in_review) ──
       if (intent.intent === 'done') {
         if (!intent.taskId) {
           await reply(`❌ Which task did you mean? Use <code>/tasks</code> to find it, then <code>/done &lt;id&gt;</code>.`)
@@ -1200,8 +1291,8 @@ export async function POST(request: Request) {
           return NextResponse.json({ ok: true })
         }
         const nt = esc(task.title)
-        await supabase.from('tasks').update({ status: 'done' }).eq('id', task.id)
-        await reply(`✅ <b>${nt}</b>\nMarked as done. Nice work! 🎉`)
+        await supabase.from('tasks').update({ status: 'in_review' }).eq('id', task.id)
+        await reply(`👀 <b>${nt}</b>\nMoved to In Review.`)
         return NextResponse.json({ ok: true })
       }
 
