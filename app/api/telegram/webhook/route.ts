@@ -690,7 +690,7 @@ export async function POST(request: Request) {
 
     // Allow trailing /addtask (e.g. "some text...\n/addtask") by treating
     // everything before it as the task title.
-    if (!['/addtask', '/done', '/update', '/help', '/start', '/deadlines', '/tasks', '/standup'].includes(cmd)) {
+    if (!['/addtask', '/done', '/complete', '/completed', '/update', '/help', '/start', '/deadlines', '/tasks', '/standup'].includes(cmd)) {
       const trailingAddTask = normalized.match(/^([\s\S]*?)\r?\n\s*\/addtask(?:@\w+)?\s*$/i)
       if (trailingAddTask) {
         cmd = '/addtask'
@@ -714,7 +714,10 @@ export async function POST(request: Request) {
         `/addtask &lt;title&gt; by Friday — add a task with a specific deadline\n` +
         `/addtask &lt;title&gt; @username — add a task and assign it to someone\n\n` +
         `✏️ <b>Update</b>\n` +
-        `/done &lt;number or keyword&gt; — e.g. /done 23 or /done login bug\n` +
+        `/done &lt;number or keyword&gt; — mark as in review (e.g. /done 23)\n` +
+        `/done t21,t22,t23 — bulk mark as in review\n` +
+        `/complete &lt;number or keyword&gt; — mark as done (e.g. /complete 23)\n` +
+        `/complete t21,t22,t23 — bulk mark as done\n` +
         `/update &lt;number or keyword&gt; &lt;status&gt; — single update\n` +
         `/update t21,t22,t23 done — bulk shared status\n` +
         `/update t21 done, t22 review, t23 inprogress — bulk mixed status\n` +
@@ -772,7 +775,7 @@ export async function POST(request: Request) {
           msg += `• <code>${code}</code> ${esc(t.title)} · ${dueDate}${assignee}\n`
         })
       }
-      msg += `\n<i>Use /done &lt;id&gt; to mark a task complete.</i>`
+      msg += `\n<i>Use /done &lt;id&gt; to move to review, or /complete &lt;id&gt; to mark done.</i>`
       await reply(msg)
       return NextResponse.json({ ok: true })
     }
@@ -823,9 +826,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
-    // ── /addtask, /done, /update — NLP-powered ──────────────────────
-    if (['/addtask', '/done', '/update'].includes(cmd)) {
+    // ── /addtask, /done, /complete, /completed, /update — NLP-powered ──────────────────────
+    if (['/addtask', '/done', '/complete', '/completed', '/update'].includes(cmd)) {
       if (!rest) {
+        const completeExample = (
+          `Usage: <code>/complete &lt;number or keyword&gt;</code>\n\n` +
+          `<b>Examples:</b>\n` +
+          `/complete 23\n` +
+          `/complete login bug\n` +
+          `/complete t21,t22,t23\n\n` +
+          `<i>Marks tasks as done. Use the task number or any words from the title.</i>`
+        )
         const examples: Record<string, string> = {
           '/addtask': (
             `Usage: <code>/addtask &lt;title&gt;</code>\n\n` +
@@ -839,9 +850,12 @@ export async function POST(request: Request) {
             `<b>Examples:</b>\n` +
             `/done 23\n` +
             `/done login bug\n` +
-            `/done fix api\n\n` +
-            `<i>Use the task number or any words from the title.</i>`
+            `/done t21,t22,t23\n\n` +
+            `<i>Moves tasks to In Review. Use the task number or any words from the title.</i>\n` +
+            `<i>To mark as fully done, use /complete instead.</i>`
           ),
+          '/complete': completeExample,
+          '/completed': completeExample,
           '/update': (
             `Usage: <code>/update &lt;number or keyword&gt; &lt;status&gt;</code>\n\n` +
             `<b>Examples:</b>\n` +
