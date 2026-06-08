@@ -4,10 +4,10 @@ import { getTodayInAppTimeZoneISO, getWeekdayFromISODate, addDaysToISODate } fro
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type StandupFilter = 'overview' | 'active' | 'backlog' | 'done'
+export type StandupFilter = 'overview' | 'active' | 'backlog' | 'done' | 'review'
 
 export const VALID_STANDUP_FILTERS = new Set<StandupFilter>([
-  'overview', 'active', 'backlog', 'done',
+  'overview', 'active', 'backlog', 'done', 'review',
 ])
 
 const ACTIVE_STATUSES = new Set(['in_progress', 'in_review', 'blocked', 'todo'])
@@ -266,13 +266,22 @@ export async function buildStandupPage(
       text += renderByMember(data.backlog)
     }
 
-  } else {
-    // done
-    text = `${header}\n\n✅ <b>Done</b> <i>(${data.doneCount})</i>`
-    if (data.doneCount === 0) {
-      text += `\n\n<i>Nothing marked done yet.</i>`
+  } else if (filter === 'review') {
+    text = `${header}\n\n👀 <b>For Review</b> <i>(${data.inReview.length})</i>`
+    if (data.inReview.length === 0) {
+      text += `\n\n<i>Nothing waiting for review right now.</i>`
     } else {
-      text += renderByMember(data.done)
+      text += renderByMember(data.inReview)
+    }
+
+  } else {
+    // done — this week only
+    const thisWeekLabel = formatWeekLabel(data.weekStart, data.weekEnd)
+    text = `${header}\n\n✅ <b>Done this week</b> <i>(${thisWeekLabel})</i>`
+    if (data.doneThisWeek.length === 0) {
+      text += `\n\n<i>No tasks completed this week yet.</i>`
+    } else {
+      text += renderByMember(data.doneThisWeek)
     }
   }
 
@@ -290,7 +299,8 @@ function buildKeyboard(data: StandupData, active: StandupFilter): object {
       btn('overview', '📊 Overview'),
       btn('active',   `Active (${data.activeCount})`),
       btn('backlog',  `Backlog (${data.backlog.length})`),
-      btn('done',     `Done (${data.doneCount})`),
+      btn('review',   `Review (${data.inReview.length})`),
+      btn('done',     `Done (${data.doneThisWeek.length})`),
     ]],
   }
 }
