@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   KanbanSquare, CheckCircle2, Clock, AlertCircle, Loader2,
-  TrendingUp, ArrowRight,
+  TrendingUp, ArrowRight, Eye,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
@@ -34,6 +34,7 @@ export default function OverviewPage() {
   const totalTasks   = tasks.length
   const doneTasks    = tasks.filter(t => t.status === 'done').length
   const inProgress   = tasks.filter(t => t.status === 'in_progress').length
+  const inReview     = tasks.filter(t => t.status === 'in_review').length
   const blocked      = tasks.filter(t => t.status === 'blocked').length
   const urgentTasks  = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done').length
   const overdueTasks = tasks.filter(t =>
@@ -57,6 +58,7 @@ export default function OverviewPage() {
     { label: 'Total Tasks',  value: totalTasks,  icon: KanbanSquare, color: 'var(--primary)', bg: 'color-mix(in srgb, var(--primary) 12%, transparent)' },
     { label: 'Completed',    value: doneTasks,   icon: CheckCircle2, color: '#10b981',        bg: 'rgba(16,185,129,0.1)',  sub: `${donePercent}% rate` },
     { label: 'In Progress',  value: inProgress,  icon: TrendingUp,   color: '#eab308',        bg: 'rgba(234,179,8,0.1)'  },
+    { label: 'In Review',    value: inReview,    icon: Eye,          color: '#06b6d4',        bg: 'rgba(6,182,212,0.1)'  },
     { label: 'Blocked',      value: blocked,     icon: AlertCircle,  color: '#ef4444',        bg: 'rgba(239,68,68,0.1)'  },
     { label: 'Urgent',       value: urgentTasks, icon: AlertCircle,  color: '#a78bfa',        bg: 'rgba(167,139,250,0.1)'},
     { label: 'Overdue',      value: overdueTasks,icon: Clock,        color: '#f97316',        bg: 'rgba(249,115,22,0.1)' },
@@ -78,7 +80,7 @@ export default function OverviewPage() {
       </div>
 
       {/* ── KPI Grid ───────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         {statCards.map(stat => (
           <div key={stat.label} className="glass-panel rounded-2xl p-4">
             <div className="inline-flex p-2 rounded-xl mb-3" style={{ background: stat.bg }}>
