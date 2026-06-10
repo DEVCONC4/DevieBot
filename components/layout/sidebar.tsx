@@ -73,11 +73,13 @@ export function Sidebar() {
 
   async function moveOverdueTasks() {
     const today = new Date().toISOString().split('T')[0]
+    // Only demote unfinished work. Leave in_review alone — those are finished
+    // and waiting on sign-off, not stale tasks to be parked in the backlog.
     await supabase
       .from('tasks')
       .update({ status: 'backlog' })
       .lt('due_date', today)
-      .not('status', 'in', '("done","backlog")')
+      .not('status', 'in', '("done","backlog","in_review")')
   }
 
   async function fetchDeadlines() {
