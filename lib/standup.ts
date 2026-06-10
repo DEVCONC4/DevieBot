@@ -235,6 +235,14 @@ export async function buildStandupPage(
     text += `✅ Done: <b>${data.doneCount}</b>\n`
     text += `🚧 Blocked: <b>${data.blocked.length}</b>`
 
+    // For review
+    text += `\n\n👀 <b>For Review</b> <i>(${data.inReview.length})</i>`
+    if (data.inReview.length === 0) {
+      text += `\n<i>Nothing waiting for review right now.</i>`
+    } else {
+      text += renderByMember(data.inReview)
+    }
+
     // Done this week
     const thisWeekLabel = formatWeekLabel(data.weekStart, data.weekEnd)
     text += `\n\n✅ <b>Done this week</b> <i>(${thisWeekLabel})</i>`
