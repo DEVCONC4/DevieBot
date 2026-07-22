@@ -699,6 +699,19 @@ export async function POST(request: Request) {
       }
     }
 
+    // Allow tagging the bot with natural phrasing instead of /addtask, e.g.
+    // "@DevieTheBot pls work on fixing the login bug" or "@DevieTheBot add task: fix login @dale"
+    if (!cmd.startsWith('/') && /@(?:deviethebot|deviebot)\b/i.test(normalized)) {
+      const withoutMention = normalized.replace(/@(?:deviethebot|deviebot)\b/gi, ' ').replace(/\s+/g, ' ').trim()
+      const leadIn = withoutMention.match(/^(?:pls\s+|please\s+|can\s+you\s+|could\s+you\s+)*(?:work\s+on|add\s+task|new\s+task|create\s+task|add)\s*:?\s*/i)
+      if (leadIn) {
+        cmd = '/addtask'
+        rest = withoutMention.slice(leadIn[0].length).trim()
+        rawRest = rest
+        args = rest.split(/\s+/).filter(Boolean)
+      }
+    }
+
     // ── /help or /start ───────────────────────────────────────────────
     if (cmd === '/help' || cmd === '/start') {
       await reply(
@@ -712,7 +725,9 @@ export async function POST(request: Request) {
         `➕ <b>Create</b>\n` +
         `/addtask &lt;title&gt; — add a task (defaults to nearest Tue or Thu onsite day)\n` +
         `/addtask &lt;title&gt; by Friday — add a task with a specific deadline\n` +
-        `/addtask &lt;title&gt; @username — add a task and assign it to someone\n\n` +
+        `/addtask &lt;title&gt; @username — add a task and assign it to someone\n` +
+        `@DevieTheBot pls work on &lt;title&gt; — same as /addtask, no slash needed\n` +
+        `@DevieTheBot add task &lt;title&gt; @username — tag + assign in one go\n\n` +
         `✏️ <b>Update</b>\n` +
         `/done &lt;number or keyword&gt; — mark as in review (e.g. /done 23)\n` +
         `/done t21,t22,t23 — bulk mark as in review\n` +

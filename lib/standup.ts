@@ -252,6 +252,12 @@ export async function buildStandupPage(
       text += renderByMember(data.doneThisWeek)
     }
 
+    // Overdue
+    if (data.overdue.length > 0) {
+      text += `\n\n🔴 <b>Overdue</b> <i>(${data.overdue.length})</i>`
+      text += renderByMember(data.overdue)
+    }
+
     text += `\n📚 <b>Reminder:</b> <i>Read and finish your assigned books, cohorts! Consistency compounds.</i>`
 
     const quote = await dailyQuote()
@@ -292,6 +298,9 @@ export async function buildStandupPage(
       text += renderByMember(data.doneThisWeek)
     }
   }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+  if (appUrl) text += `\n\n🔗 <a href="${appUrl}/dashboard">Open Dashboard</a>`
 
   return { text: text.trimEnd(), keyboard: buildKeyboard(data, filter) }
 }

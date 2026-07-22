@@ -141,7 +141,7 @@ export function Sidebar() {
           className="h-8 w-8 rounded-xl overflow-hidden shrink-0"
           style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--devcon-sky) 100%)' }}
         >
-          <Image src="/icons/icon.png" alt="DEVCON 16" width={32} height={32} className="w-full h-full object-cover" />
+          <Image src="/icons/logo.png" alt="DEVCON 16" width={32} height={32} className="w-full h-full object-cover" />
         </div>
         <span className="font-bold text-sm text-foreground" style={{ fontFamily: 'var(--font-space-grotesk)' }}>Devie</span>
         <div className="ml-auto mono-tag">
@@ -185,7 +185,7 @@ export function Sidebar() {
             }}
           >
             <Image
-              src="/icons/icon.png"
+              src="/icons/logo.png"
               alt="DEVCON 16"
               width={40}
               height={40}
