@@ -352,6 +352,15 @@ function splitRefAndStatus(segment: string): { ref: string; statusRaw: string; l
     return { ref, statusRaw, link, note }
   }
 
+  // "done T-233" — status word first, ref after
+  const head = part.match(new RegExp(`^(${STATUS_TAIL_PATTERN})\\s+(.+)$`, 'i'))
+  if (head) {
+    const statusRaw = head[1].trim()
+    const ref = head[2].trim()
+    if (!ref || !statusRaw) return null
+    return { ref, statusRaw, link, note }
+  }
+
   const tokens = part.split(/\s+/)
   if (tokens.length < 2) return null
   return {
@@ -366,29 +375,40 @@ function parseUpdateSpecs(raw: string): Array<{ ref: string; statusRaw: string; 
   const input = raw.trim()
   if (!input) return []
 
-  // Shared trailing status: "t21,t22,t23 done" (no link support for shared-status bulk)
-  const shared = input.match(new RegExp(`^(.+?)\\s+(${STATUS_TAIL_PATTERN})$`, 'i'))
-  if (shared) {
-    const refsPart = shared[1]
-    const statusRaw = shared[2].trim()
-    if (refsPart.includes(',') || refsPart.includes('\n')) {
-      const refs = refsPart
-        .split(/[\n,]+/)
-        .map(r => r.trim())
-        .filter(Boolean)
-      if (refs.length > 0) {
-        return refs.map(ref => ({ ref, statusRaw }))
-      }
+  if (!input.includes(',') && !input.includes('\n')) {
+    return [splitRefAndStatus(input)].filter((spec): spec is { ref: string; statusRaw: string; link?: string; note?: string } => spec !== null)
+  }
+
+  // Bulk: try each comma/newline-separated item independently first, e.g.
+  // "t21 done, t22 review, t23 inprogress" — each item carries its own status.
+  const rawParts = input.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
+  const perItem = rawParts.map(splitRefAndStatus)
+  if (perItem.length > 0 && perItem.every((spec): spec is { ref: string; statusRaw: string; link?: string; note?: string } => spec !== null)) {
+    return perItem
+  }
+
+  // Fall back to a single shared status applied to every ref, e.g.
+  // "t21,t22,t23 done" (trailing) or "done t21,t22,t23" (leading).
+  // No link/note support in this shared-status shortcut.
+  const trailing = input.match(new RegExp(`^(.+?)\\s+(${STATUS_TAIL_PATTERN})$`, 'i'))
+  if (trailing) {
+    const refs = trailing[1].split(/[\n,]+/).map(r => r.trim()).filter(Boolean)
+    if (refs.length > 0) {
+      const statusRaw = trailing[2].trim()
+      return refs.map(ref => ({ ref, statusRaw }))
     }
   }
 
-  const parts = (input.includes('\n') || input.includes(','))
-    ? input.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
-    : [input]
+  const leading = input.match(new RegExp(`^(${STATUS_TAIL_PATTERN})\\s+(.+)$`, 'i'))
+  if (leading) {
+    const refs = leading[2].split(/[\n,]+/).map(r => r.trim()).filter(Boolean)
+    if (refs.length > 0) {
+      const statusRaw = leading[1].trim()
+      return refs.map(ref => ({ ref, statusRaw }))
+    }
+  }
 
-  return parts
-    .map(splitRefAndStatus)
-    .filter((spec): spec is { ref: string; statusRaw: string; link?: string; note?: string } => spec !== null)
+  return perItem.filter((spec): spec is { ref: string; statusRaw: string; link?: string; note?: string } => spec !== null)
 }
 
 // Accept "T-001", "t001", "1" (task_number) or a UUID prefix
