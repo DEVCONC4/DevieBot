@@ -1,6 +1,10 @@
 -- ============================================================
--- DEVIE DASHBOARD - Supabase Schema
--- Run this in your Supabase SQL editor
+-- DEVIE DASHBOARD — Supabase Schema
+-- Run this in your Supabase SQL editor to bootstrap a fresh project.
+--
+-- This file is the canonical schema and must stay in sync with
+-- types/database.ts. For an existing database, apply the numbered
+-- files in supabase/migrations/ instead of re-running this.
 -- ============================================================
 
 -- Enable UUID extension
@@ -10,7 +14,7 @@ create extension if not exists "uuid-ossp";
 -- ENUMS
 -- ============================================================
 create type task_priority as enum ('low', 'medium', 'high', 'urgent');
-create type task_status as enum ('todo', 'in_progress', 'in_review', 'blocked', 'done');
+create type task_status as enum ('backlog', 'todo', 'in_progress', 'in_review', 'blocked', 'done');
 create type camp_status as enum ('active', 'completed', 'archived', 'paused');
 
 -- ============================================================
@@ -25,6 +29,9 @@ create table tags (
 
 -- ============================================================
 -- CODE CAMPS
+-- Reserved for per-camp boards. The app currently creates every task with
+-- camp_id = null (the "General Board"); the table and the foreign key are
+-- kept so camp-scoped boards can be switched on without a migration.
 -- ============================================================
 create table code_camps (
   id uuid primary key default uuid_generate_v4(),
@@ -44,8 +51,14 @@ create table code_camps (
 -- ============================================================
 -- TASKS
 -- ============================================================
+-- Human-readable task codes: task_number 1 renders as "T-001".
+-- See taskCode() in types/database.ts. Nullable so rows created before the
+-- sequence existed still load.
+create sequence if not exists task_number_seq;
+
 create table tasks (
   id uuid primary key default uuid_generate_v4(),
+  task_number integer unique default nextval('task_number_seq'),
   title text not null,
   description text,
   priority task_priority not null default 'medium',
@@ -54,9 +67,16 @@ create table tasks (
   order_index integer not null default 0,
   camp_id uuid references code_camps(id) on delete cascade,
   -- null camp_id = general board task
+  assigned_to text,  -- member name as free text, resolved against members at read time
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+alter sequence task_number_seq owned by tasks.task_number;
+
+create index tasks_status_idx   on tasks (status);
+create index tasks_due_date_idx on tasks (due_date);
+create index tasks_camp_id_idx  on tasks (camp_id);
 
 -- ============================================================
 -- TASK TAGS (junction)
@@ -78,28 +98,29 @@ create table task_comments (
   updated_at timestamptz default now()
 );
 
+create index task_comments_task_id_idx on task_comments (task_id);
+
 -- ============================================================
--- MEMBERS (team members for task assignment)
+-- MEMBERS
+-- Auto-registered from Telegram (syncMember in the webhook route) or added
+-- manually from the Team page.
 -- ============================================================
 create table members (
-  id uuid primary key default uuid_generate_v4(),
-  name text not null,
-  color text not null default '#6366f1', -- for avatar fallback background
-  avatar_url text,
+  id serial primary key,
+  telegram_id text unique,
+  telegram_username text,
+  name text,   -- first_name + last_name from Telegram, or manually entered
+  role text,   -- free-form, e.g. 'cohort4', 'cohort3', 'admin'
   created_at timestamptz default now()
 );
 
--- ============================================================
--- TASK ASSIGNMENTS (junction)
--- ============================================================
-create table task_assignments (
-  task_id uuid references tasks(id) on delete cascade,
-  member_id uuid references members(id) on delete cascade,
-  primary key (task_id, member_id)
-);
+-- Assignee lookup is case-insensitive on name and username.
+create index members_telegram_username_idx on members (lower(telegram_username));
+create index members_name_idx              on members (lower(name));
 
 -- ============================================================
 -- TELEGRAM CONFIG
+-- Fallback for TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID; env vars win.
 -- ============================================================
 create table telegram_config (
   id uuid primary key default uuid_generate_v4(),
@@ -155,7 +176,6 @@ alter table tags enable row level security;
 alter table task_tags enable row level security;
 alter table task_comments enable row level security;
 alter table members enable row level security;
-alter table task_assignments enable row level security;
 alter table telegram_config enable row level security;
 alter table audit_logs enable row level security;
 
@@ -176,9 +196,6 @@ create policy "Authenticated full access" on task_comments
   for all to authenticated using (true) with check (true);
 
 create policy "Authenticated full access" on members
-  for all to authenticated using (true) with check (true);
-
-create policy "Authenticated full access" on task_assignments
   for all to authenticated using (true) with check (true);
 
 create policy "Authenticated full access" on telegram_config
@@ -204,9 +221,6 @@ create policy "Service role full access" on task_comments
   for all to service_role using (true) with check (true);
 
 create policy "Service role full access" on members
-  for all to service_role using (true) with check (true);
-
-create policy "Service role full access" on task_assignments
   for all to service_role using (true) with check (true);
 
 create policy "Service role full access" on telegram_config

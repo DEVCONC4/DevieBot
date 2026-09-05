@@ -131,12 +131,6 @@ export type Database = {
         Update: Partial<Omit<Member, 'id' | 'created_at'>>
         Relationships: []
       }
-      task_assignments: {
-        Row: { task_id: string; member_id: string }
-        Insert: { task_id: string; member_id: string }
-        Update: { task_id?: string; member_id?: string }
-        Relationships: []
-      }
       telegram_config: {
         Row: TelegramConfig
         Insert: Omit<TelegramConfig, 'id' | 'updated_at'>
